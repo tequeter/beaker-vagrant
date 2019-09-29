@@ -181,7 +181,7 @@ module Beaker
     end
 
     def set_ssh_config host, user
-        f = Tempfile.new("#{host.name}")
+        f = File.new(File.join(@options[:log_dated_dir], "vagrant_ssh_config_#{host.name}.txt"), 'w')
         ssh_config = Dir.chdir(@vagrant_path) do
           stdin, stdout, stderr, wait_thr = Open3.popen3(@vagrant_env, 'vagrant', 'ssh-config', host.name)
           if not wait_thr.value.success?
@@ -203,7 +203,6 @@ module Beaker
         f.rewind
         host['ssh'] = {:config => f.path()}
         host['user'] = user
-        @temp_files << f
     end
 
     def get_ip_from_vagrant_file(hostname)
@@ -228,12 +227,14 @@ module Beaker
       require 'tempfile'
       @options = options
       @logger = options[:logger]
-      @temp_files = []
       @hosts = vagrant_hosts
       @vagrant_path = File.expand_path(File.join(File.basename(__FILE__), '..', '.vagrant', 'beaker_vagrant_files', File.basename(options[:hosts_file])))
       FileUtils.mkdir_p(@vagrant_path)
       @vagrant_file = File.expand_path(File.join(@vagrant_path, "Vagrantfile"))
       @vagrant_env = { "RUBYLIB" => "", "RUBYOPT" => "" }
+      if !@options[:log_dated_dir] or !File.directory?(@options[:log_dated_dir])
+        raise "Beaker::Hypervisor::Vagrant expects a working dir given as a log_dated_dir option"
+      end
     end
 
     def configure(opts = {})
@@ -280,10 +281,6 @@ module Beaker
     end
 
     def cleanup
-      @logger.debug "removing temporary ssh-config files per-vagrant box"
-      @temp_files.each do |f|
-        f.close()
-      end
       @logger.notify "Destroying vagrant boxes"
       vagrant_cmd("destroy --force")
       FileUtils.rm_rf(@vagrant_path)
